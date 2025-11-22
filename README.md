@@ -1,89 +1,111 @@
-**Web Scrapping — Problem of the Day Fetcher**
+# GeeksforGeeks Problem Scraper API
 
-Short, focused script that fetches a programming "Problem of the Day" page (currently GeeksforGeeks), extracts the title, description and examples, and prints a JSON summary to the console.
+This Flask application provides an API to scrape problem details from GeeksforGeeks, including the Problem of the Day (POTD). It leverages Playwright to handle JavaScript-rendered pages and BeautifulSoup for parsing HTML content.
 
-**Features:**
-- **Scrapes** problem pages using Selenium + BeautifulSoup.
-- **Parses** description paragraphs and example blocks into a JSON object.
-- **Pluggable** source via an API endpoint that returns the problem URL.
+## Features
 
-**Requirements:**
-- **Python 3.8+**
-- `selenium`, `webdriver_manager`, `requests`, `beautifulsoup4`, `python-dotenv` (see `requirements.txt`)
-- Google Chrome installed (ChromeDriver is managed automatically by `webdriver_manager`).
+*   Scrape problem title, description, examples, and associated images from any GeeksforGeeks problem URL.
+*   Fetch the Problem of the Day (POTD) details automatically.
+*   Returns data in a structured JSON format.
 
-**Quick Start (Windows, cmd.exe)**
-1. Create and activate a virtual environment:
+## Setup
 
-```
-python -m venv venv
-venv\Scripts\activate
-```
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/your-repository-name.git
+    cd web_scrapping
+    ```
 
-2. Install dependencies:
+2.  **Create a virtual environment and activate it:**
+    ```bash
+    python -m venv venv
+    ./venv/Scripts/activate # On Windows
+    source venv/bin/activate # On macOS/Linux
+    ```
 
-```
-pip install -r requirements.txt
-```
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    playwright install
+    ```
 
-3. Create a `.env` file in the project root with the required variables (example below).
+4.  **Create a `.env` file:**
+    Create a file named `.env` in the root directory of the project and add the following environment variables:
 
-4. Run the script:
+    ```
+    PROBLEM_CONTENT="problem-content-class-name" # The HTML class name of the div containing problem content on GeeksforGeeks
+    GFG_API="https://practiceapi.geeksforgeeks.org/api/v1/problems/problem-of-the-day/details/" # The API endpoint for GeeksforGeeks Problem of the Day
+    ```
+    You will need to inspect the GeeksforGeeks website to find the correct `PROBLEM_CONTENT` class name.
 
-```
-python app.py
-```
+5.  **Run the application:**
+    ```bash
+    python app.py
+    ```
+    The application will run on `http://127.0.0.1:5000/` by default.
 
-**Example `.env`**
-Place this file at the project root as `.env` (no surrounding quotes):
+## API Endpoints
 
-```
-# URL or API that returns a JSON with key `problem_url`
-GFG_API=https://your-service.example.com/today
+### 1. Scrape a specific problem
 
-# CSS class or DIV identifier that contains the problem content on the page
-# Example: PROBLEM_CONTENT=problem-content
-PROBLEM_CONTENT=your-problem-container-class
-```
+*   **URL:** `/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/<problem_url>`
+*   **Method:** `GET`
+*   **Parameters:**
+    *   `<problem_url>`: The full URL of the GeeksforGeeks problem you want to scrape.
+*   **Example Request:**
+    ```
+    GET http://127.0.0.1:5000/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/https://www.geeksforgeeks.org/problems/minimize-connections/1
+    ```
+*   **Example Response:**
+    ```json
+    {
+        "title": "Minimum Operations to Connect Hospitals | Practice | GeeksforGeeks ",
+        "description": [
+            "You are given an undirected network of V hospitals numbered from 0 to V - 1, represented as a 2D array edges[][], where each element edges[i] = [u, v] denotes a direct connection between hospital u and hospital v.In one operation, you are allowed to remove any existing link and reconnect it between two hospitals that are currently not directly or indirectly connected.",
+            "Your task is to determine the minimum number of operations required to make sure that all hospitals become connected, either directly or indirectly, using the given links.",
+            "Note: If it is impossible to connect all hospitals into a single network, return -1."
+        ],
+        "examples": [
+            {
+                "input": "V = 4, E = 3, edges[][] = [[0, 1], [0, 2], [1, 2]]",
+                "output": "1",
+                "images": [
+                    "https://media.geeksforgeeks.org/img-practice/prod/addEditProblem/710261/Web/Other/blobid0_1763728384.png"
+                ],
+                "explanation": "Remove the connection between hospitals 1 and 2 and connect the hospitals 1 and 3."
+            },
+            {
+                "input": "V = 5, E = 4, edges[][] = [[0, 1], [0, 2], [2, 3], [3, 4]]",
+                "output": "0",
+                "images": [
+                    "https://media.geeksforgeeks.org/img-practice/prod/addEditProblem/710261/Web/Other/blobid1_1763728438.png"
+                ],
+                "explanation": "All hospitals are already connected directly or indirectly. No rearrangement of connections is required."
+            }
+        ],
+        "problem_url": "https://www.geeksforgeeks.org/problems/minimize-connections/1"
+    }
+    ```
 
-Notes on `.env` values:
-- `GFG_API` should return a JSON object with a `problem_url` field, for example `{ "problem_url": "https://www.geeksforgeeks.org/...." }`.
-- `PROBLEM_CONTENT` should match the container element on the target site that holds the problem text (inspect the page in Chrome and use the element's class or id).
+### 2. Fetch Problem of the Day (POTD)
 
-**How it works**
-- `app.py` requests the `GFG_API` to get today's problem URL.
-- Selenium (via `webdriver_manager`) opens the page and retrieves the HTML.
-- BeautifulSoup finds the element matching `PROBLEM_CONTENT` and extracts paragraphs and example blocks.
-- The script prints a JSON object with `title`, `description` (list of paragraphs), and `examples` (list of {input, output, explanation, images}).
+*   **URL:** `/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/potd`
+*   **Method:** `GET`
+*   **Example Request:**
+    ```
+    GET http://127.0.0.1:5000/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/potd
+    ```
+*   **Example Response:**
+    (Same format as the specific problem scrape endpoint, but for the current POTD)
 
-**Sample output**
-```
-Problem url for Today : https://www.geeksforgeeks.org/problems/shortest-path-using-atmost-one-curved-edge--170647/1
-{
-    "title": "Shortest Path Using Atmost One Curved Edge | Practice | GeeksforGeeks",
-    "description": [
-        "Given an undirected, connected graph ...",
-        "You are given two vertices a and b ..."
-    ],
-    "examples": [
-        {
-            "input": "V = 4, E = 4, a = 1, b = 3, ...",
-            "output": "2",
-            "images": [ "https://...jpg" ],
-            "explanation": "We can follow the path 1 -> 0 -> 3"
-        }
-    ]
-}
-```
+## Dependencies
 
-**Troubleshooting & Tips**
-- If Selenium fails to open Chrome, ensure Chrome is installed and up-to-date. `webdriver_manager` downloads a matching driver automatically.
-- If the script finds no content, verify `PROBLEM_CONTENT` by inspecting the target page and adjusting the selector.
-- Increase the `time.sleep(5)` in `app.py` if the page needs more time to load, or replace it with an explicit Selenium wait for better reliability.
-- To run Chrome headless, modify `app.py` to configure Chrome options (I can add a headless option if you want).
+The project uses the following libraries:
 
-**Contributing**
-Open an issue or send a pull request. If you'd like, I can:
-- add a `--headless` option
-- add better error handling for network and parsing failures
-- include a small test harness
+*   Flask
+*   BeautifulSoup4
+*   Playwright
+*   python-dotenv
+*   requests
+
+These dependencies are listed in `requirements.txt`.

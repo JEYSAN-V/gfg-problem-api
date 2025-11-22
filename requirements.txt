@@ -1,4 +1,5 @@
-selenium
-webdriver_manager
-requests
+Flask
 beautifulsoup4
+playwright
+python-dotenv
+requests
