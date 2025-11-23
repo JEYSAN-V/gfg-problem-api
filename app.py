@@ -22,8 +22,49 @@ def load_page_with_js(url):
         browser.close()
         return html
 
+def parse_example_block(text: str):
+    lines = text.split("\n")
 
-@app.route('/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/<path:problem_url>', methods=['GET'])
+    input_part = []
+    output_part = []
+    explanation_part = []
+
+    current = None  # can be "input", "output", "explanation"
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith("Input"):
+            current = "input"
+            continue
+        if stripped.startswith("Output"):
+            current = "output"
+            continue
+        if stripped.startswith("Explanation"):
+            current = "explanation"
+            continue
+        if stripped.startswith("Constraints"):
+            current = None
+            continue
+
+        if stripped == ":":
+            continue
+
+        if current == "input":
+            input_part.append(stripped)
+        elif current == "output":
+            output_part.append(stripped)
+        elif current == "explanation":
+            explanation_part.append(stripped)
+
+    return {
+        "input": "\n".join(input_part).strip() or None,
+        "output": "\n".join(output_part).strip() or None,
+        "explanation": "\n".join(explanation_part).strip() or None
+    }
+
+
+@app.route('/api/v1/geeksforgeeks/problem/<path:problem_url>', methods=['GET'])
 def fetch_problem(problem_url):
 
     load_dotenv()
@@ -61,40 +102,25 @@ def fetch_problem(problem_url):
     examples = target.find_all('pre')
     for example in examples:
         text = example.get_text("\n", strip=True)
-
-        input_part = None
-        output_part = None
-        explanation_part = None
-
-        input_match = re.search(r"Input:\s*(.*)", text)
-        output_match = re.search(r"Output:\s*(.*)", text)
-        explanation_match = re.search(r"Explanation:\s*(.*)", text)
-
-        if input_match:
-            input_part = input_match.group(1)
-
-        if output_match:
-            output_part = output_match.group(1)
-
-        if explanation_match:
-            explanation_part = explanation_match.group(1)
+        parsed = parse_example_block(text)
 
         images = [img["src"] for img in example.find_all("img")]
 
         final_json["examples"].append({
-            "input": input_part,
-            "output": output_part,
+            "input": parsed["input"],
+            "output": parsed["output"],
             "images": images,
-            "explanation": explanation_part
+            "explanation": parsed["explanation"]
         })
 
-    response = json.dumps(final_json, indent=4)
+
+    response = json.dumps(final_json, indent=4, ensure_ascii=False)
     print(response)
 
     return response, 200, {'Content-Type': 'application/json'}
 
 
-@app.route('/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/potd', methods=['GET'])
+@app.route('/api/v1/geeksforgeeks/problem/potd', methods=['GET'])
 def fetch_potd():
     load_dotenv()
     GFG_POTD_API = os.getenv("GFG_API")
@@ -103,7 +129,7 @@ def fetch_potd():
     potd_url = res['problem_url']
 
     response = requests.get(
-        f"http://127.0.0.1:5000/fetchdailyproblemapi.project/api/v1/geeksforgeeks/fetchproblem/{potd_url}"
+        f"http://localhost:5000/api/v1/geeksforgeeks/problem/{potd_url}"
     )
 
     return response.content, response.status_code, {'Content-Type': 'application/json'}
