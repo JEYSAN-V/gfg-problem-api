@@ -1,4 +1,3 @@
-import re
 import os
 import json
 import requests
@@ -128,11 +127,7 @@ def fetch_potd():
     res = requests.get(GFG_POTD_API).json()
     potd_url = res['problem_url']
 
-    response = requests.get(
-        f"http://localhost:5000/api/v1/geeksforgeeks/problem/{potd_url}"
-    )
-
-    return response.content, response.status_code, {'Content-Type': 'application/json'}
+    return fetch_problem(potd_url)
 
 
 if __name__ == "__main__":
