@@ -2,133 +2,129 @@ import os
 import json
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+from urllib.parse import urlparse
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
+
+load_dotenv()
+
 
 app = Flask(__name__)
 
+# --------------------------------------------------
+# Fetch POTD URL
+# --------------------------------------------------
 
-def load_page_with_js(url):
-    """Load page fully rendered with JS using Playwright"""
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        page.goto(url, wait_until="networkidle")
-        html = page.content()
-
-        browser.close()
-        return html
-
-def parse_example_block(text: str):
-    lines = text.split("\n")
-
-    input_part = []
-    output_part = []
-    explanation_part = []
-
-    current = None  # can be "input", "output", "explanation"
-
-    for line in lines:
-        stripped = line.strip()
-
-        if stripped.startswith("Input"):
-            current = "input"
-            continue
-        if stripped.startswith("Output"):
-            current = "output"
-            continue
-        if stripped.startswith("Explanation"):
-            current = "explanation"
-            continue
-        if stripped.startswith("Constraints"):
-            current = None
-            continue
-
-        if stripped == ":":
-            continue
-
-        if current == "input":
-            input_part.append(stripped)
-        elif current == "output":
-            output_part.append(stripped)
-        elif current == "explanation":
-            explanation_part.append(stripped)
-
-    return {
-        "input": "\n".join(input_part).strip() or None,
-        "output": "\n".join(output_part).strip() or None,
-        "explanation": "\n".join(explanation_part).strip() or None
-    }
-
-
-@app.route('/api/v1/geeksforgeeks/problem/<path:problem_url>', methods=['GET'])
-def fetch_problem(problem_url):
-
-    load_dotenv()
-    PROBLEM_CONTENT = os.getenv("PROBLEM_CONTENT")
-    print(f"Problem URL: {problem_url}")
-
-    # ---- Load page with JS support ----
-    html = load_page_with_js(problem_url)
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    # ---- Extract Title ----
-    title = soup.find('title').get_text()
-    print("Title:", title)
-
-    # ---- Extract main content ----
-    target = soup.find('div', class_=PROBLEM_CONTENT)
-
-    final_json = {
-        "title": title,
-        "description": [],
-        "examples": [],
-        "problem_url": problem_url
-    }
-
-    # ---- DESCRIPTION ----
-    paragraphs = target.find_all('p')
-    for para in paragraphs:
-        p = para.get_text().strip()
-        if p.lower().startswith('constraint') or p.lower().startswith('example') or p == '':
-            continue
-        final_json["description"].append(p)
-
-    # ---- EXAMPLES ----
-    examples = target.find_all('pre')
-    for example in examples:
-        text = example.get_text("\n", strip=True)
-        parsed = parse_example_block(text)
-
-        images = [img["src"] for img in example.find_all("img")]
-
-        final_json["examples"].append({
-            "input": parsed["input"],
-            "output": parsed["output"],
-            "images": images,
-            "explanation": parsed["explanation"]
-        })
-
-
-    response = json.dumps(final_json, indent=4, ensure_ascii=False)
-    print(response)
-
-    return response, 200, {'Content-Type': 'application/json'}
-
-
-@app.route('/api/v1/geeksforgeeks/problem/potd', methods=['GET'])
 def fetch_potd():
-    load_dotenv()
     GFG_POTD_API = os.getenv("GFG_API")
 
-    res = requests.get(GFG_POTD_API).json()
-    potd_url = res['problem_url']
+    res = requests.get(GFG_POTD_API, timeout=10)
+    res.raise_for_status()
 
-    return fetch_problem(potd_url)
+    data = res.json()
+
+    return {
+        "problem_url": data.get("problem_url")
+    }
+    
+# --------------------------------------------------
+# Extract Slug from URL
+# --------------------------------------------------
+def extract_slug_from_url(url):
+    parsed = urlparse(url)
+    parts = parsed.path.strip("/").split("/")
+
+    if len(parts) >= 2 and parts[0] == "problems":
+        return parts[1]
+
+    return None
 
 
+# --------------------------------------------------
+# Fetch Problem by Slug
+# --------------------------------------------------
+
+def fetch_problem(slug):
+    problem_url = f"https://www.geeksforgeeks.org/problems/{slug}/1"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    res = requests.get(problem_url, headers=headers, timeout=15)
+    res.raise_for_status()
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    script = soup.find("script", id="__NEXT_DATA__")
+
+    if not script or not script.string:
+        raise Exception("__NEXT_DATA__ not found")
+
+    next_data = json.loads(script.string)
+
+    problem_api = (
+        next_data["props"]["pageProps"]
+        ["initialState"]["problemApi"]["queries"]
+    )
+
+    dynamic_key = list(problem_api.keys())[0]
+    problem = problem_api[dynamic_key]["data"]
+
+    articles = problem.get("article_list", [])
+
+    return {
+        "content_title": problem.get("problem_name"),
+        "html_description": problem.get("problem_question"),
+        "difficulty": problem.get("difficulty"),
+        "problem_url": next_data["props"]["pageProps"].get(
+            "canonicalUrlWithOutQueryParams"
+        ),
+        "article_url": articles[0] if articles else None
+    }
+
+
+
+# --------------------------------------------------
+# API: Fetch GFG Problem by URL
+# --------------------------------------------------
+@app.route("/api/v1/problem/<path:problem_url>", methods=["GET"])
+def gfg_problem(problem_url):
+    try:
+        slug = extract_slug_from_url(problem_url)
+        if not slug:
+            return jsonify({"error": "Invalid GFG problem URL"}), 400
+
+        problem = fetch_problem(slug)
+        return jsonify(problem), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --------------------------------------------------
+# API: GFG POTD
+# --------------------------------------------------
+@app.route("/api/v1/problem/potd", methods=["GET"])
+def gfg_potd():
+    try:
+        potd = fetch_potd()
+        problem_url = potd.get("problem_url")
+
+        slug = extract_slug_from_url(problem_url)
+        if not slug:
+            return jsonify({"error": "Invalid GFG POTD URL"}), 400
+
+        problem = fetch_problem(slug)
+        return jsonify(problem), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+# --------------------------------------------------
+# Run App
+# --------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
