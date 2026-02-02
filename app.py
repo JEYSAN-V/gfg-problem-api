@@ -74,7 +74,7 @@ def fetch_problem(slug):
     articles = problem.get("article_list", [])
 
     return {
-        "content_title": problem.get("problem_name"),
+        "title": problem.get("problem_name"),
         "html_description": problem.get("problem_question"),
         "difficulty": problem.get("difficulty"),
         "problem_url": next_data["props"]["pageProps"].get(
